@@ -10,6 +10,9 @@
         <em:description>Connect to Firefox Accounts using accounts.firefox.com</em:description>
         <em:creator>Nick Alexander</em:creator>
 
+        <em:iconURL>chrome://fxa-web-signin/content/icon.png</em:iconURL>
+        <em:icon64URL>chrome://fxa-web-signin/content/icon64.png</em:icon64URL>
+
         <!-- Mobile -->
         <em:targetApplication>
             <Description>

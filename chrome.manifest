@@ -1,2 +1,2 @@
-content fxa-web-signin-addon content/
-locale  fxa-web-signin-addon en-US locale/en-US/
+content fxa-web-signin content/
+locale  fxa-web-signin en-US locale/en-US/
