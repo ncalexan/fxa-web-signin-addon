@@ -130,8 +130,8 @@ function signInToSync(window) {
     })
     .then(function (result) {
       let data = result.data;
-      data.auth = result.extras.content + AUTH;
-      data.token = result.extras.content + TOKEN;
+      data.authServerEndpoint = result.extras.content + AUTH;
+      data.tokenServerEndpoint = result.extras.content + TOKEN;
       console.log("got data: " + JSON.stringify(data));
       return Messaging.sendRequestForResult({ type: 'Accounts:CreateFirefoxAccountFromJSON', json: data })
         .then(() => { return result; });
