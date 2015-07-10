@@ -122,9 +122,9 @@ function startWebChannel(origin) {
         .then(function (result) {
           var p = new Prompt({
             window: window,
-            title: "Sync enabled",
-            message: "Firefox will begin syncing momentarily",
-            buttons: ["OK"],
+            title: Strings.GetStringFromName("success.title"),
+            message: Strings.GetStringFromName("success.message"),
+            buttons: [Strings.GetStringFromName("success.button.ok")],
           }).show();
         })
         .catch(Cu.reportError);
