@@ -15,8 +15,6 @@ Cu.import("resource://gre/modules/Services.jsm"); /*global Services */
 Cu.import("resource://gre/modules/WebChannel.jsm"); /*global WebChannel */
 Cu.import("resource://gre/modules/XPCOMUtils.jsm"); /*global XPCOMUtils */
 
-let NOTIFICATION_ID = "fxa-web-signin-complete-notification";
-
 // From https://github.com/mozilla/fxa-dev, development URL scheme is like:
 // content server: https://latest.dev.lcip.org
 // auth server: https://latest.dev.lcip.org/auth/
@@ -40,120 +38,140 @@ XPCOMUtils.defineLazyGetter(this, "Helper", function() {
   return sandbox["Helper"];
 }); /*global Helper*/
 
-function startSignInFlow(window) {
-  return new Promise(function (resolve, reject) {
-    let extras = Helper.getPrefs();
 
-    var p = new Prompt({
-      window: window,
-      title: Strings.GetStringFromName("prompt.title"),
-      buttons: [
-        Strings.GetStringFromName("prompt.button.launch"),
-        Strings.GetStringFromName("prompt.button.cancel"),
-      ],
-    }).addTextbox({
-      value: extras.content,
-      id: "content",
-      hint: Strings.GetStringFromName("prompt.hint.content"),
-      autofocus: true,
-    });
+function promiseObserverNotified(aTopic) {
+  let deferred = Promise.defer();
+  Services.obs.addObserver(function onNotification(aSubject, aTopic, aData) {
+    Services.obs.removeObserver(onNotification, aTopic);
+      deferred.resolve({subject: aSubject, data: aData});
+    }, aTopic, false);
+  return deferred.promise;
+}
 
-    p.show(function(data) {
-      // "Cancel" does nothing.
-      if (data.button == 1 || !data.content) {
-        reject();
-        return;
-      }
+function configureSignInToSync(window) {
+  let extras = Helper.getPrefs();
 
-      // Write for next time.
-      Helper.setPrefs(data);
-      extras.content = data.content;
-      // No trailing slashes, please.
-      while (extras.content.endsWith('/')) {
-        extras.content = extras.content.substring(0, extras.content.length - 1);
-      }
+  var p = new Prompt({
+    window: window,
+    title: Strings.GetStringFromName("prompt.title"),
+    buttons: [
+      Strings.GetStringFromName("prompt.button.save"),
+      Strings.GetStringFromName("prompt.button.cancel"),
+    ],
+  }).addTextbox({
+    value: extras.content,
+    id: "content",
+    hint: Strings.GetStringFromName("prompt.hint.content"),
+    autofocus: true,
+  });
 
-      window.NativeWindow.toast.show(Strings.GetStringFromName("launching.toast"), "short");
-      resolve(extras);
-    });
+  p.show(function(data) {
+    // "Cancel" does nothing.
+    if (data.button == 1 || !data.content) {
+      return;
+    }
+
+    // Write for next time.
+    Helper.setPrefs(data);
+    extras.content = data.content;
+    // No trailing slashes, please.on
+    while (extras.content.endsWith('/')) {
+      extras.content = extras.content.substring(0, extras.content.length - 1);
+    }
   });
 }
+
+var channel = null;
 
 function startWebChannel(origin) {
   console.log('Starting WebChannel for origin: ' + origin);
-  let channel = new WebChannel("account_updates", Services.io.newURI(origin, null, null));
+  channel = new WebChannel("account_updates", Services.io.newURI(origin, null, null));
 
-  return new Promise((resolve, reject) => {
-    channel.listen(function (id, data, target) {
-      console.log("channel: " + id);
-      console.log("data: " + JSON.stringify(data));
-      if (data.command == "fxaccounts:can_link_account") {
-        Accounts.firefoxAccountsExist().then(function (exist) {
-          let response = {
-            command: "fxaccounts:can_link_account",
-            messageId: data.messageId,
-            data: { data: { ok: !exist } }
-          };
-	        if (exist) {
-            let window = Services.wm.getMostRecentWindow("navigator:browser");
-            window.NativeWindow.toast.show("Firefox is already signed in to Sync", "short");  
-          }
-          console.log("sending: " + JSON.stringify(response));
-          channel.send(response, target);
-        });
-      }
+  channel.listen(function (id, data, target) {
+    let window = Services.wm.getMostRecentWindow("navigator:browser");
 
-      if (data.command == "fxaccounts:login") {
-        channel.stopListening();
-        resolve(data.data);
-      }
-    });
+    console.log("channel: " + id);
+    console.log("data: " + JSON.stringify(data));
+
+    if (data.command == "fxaccounts:can_link_account") {
+      Accounts.firefoxAccountsExist().then(function (exist) {
+        let ok = !exist;
+        let response = {
+          command: "fxaccounts:can_link_account",
+          messageId: data.messageId,
+          data: { data: { ok: ok } }
+        };
+        console.log("sending: " + JSON.stringify(response));
+        channel.send(response, target);
+	      if (!ok) {
+          let toast = Strings.GetStringFromName("accounts.exist.toast");
+          window.NativeWindow.toast.show(toast, "short");
+        }
+      });
+    }
+
+    if (data.command == "fxaccounts:login") {
+      let json = data.data;
+      json.authServerEndpoint = origin + AUTH;
+      json.tokenServerEndpoint = origin + TOKEN;
+      console.log("got json: " + JSON.stringify(json));
+      Messaging.sendRequestForResult({ type: 'Accounts:CreateFirefoxAccountFromJSON', json: json })
+        .then(() => {
+          Services.obs.notifyObservers(null, "fxaccounts:login", json);
+        })
+        .then(function (result) {
+          var p = new Prompt({
+            window: window,
+            title: "Sync enabled",
+            message: "Firefox will begin syncing momentarily",
+            buttons: ["OK"],
+          }).show();
+        })
+        .catch(Cu.reportError);
+    }
   });
 }
 
+function stopWebChannel() {
+  if (channel != null) {
+    console.log('Stopping WebChannel');
+    channel.stopListening();
+    channel = null;
+  }
+}
+
 function signInToSync(window) {
-  startSignInFlow(window)
-    .then(function (extras) {
-      let tab = window.BrowserApp.addTab(extras.content + SIGNIN);
+  if (channel == null) {
+    throw new Error("channel must not be null");
+  }
 
-      console.log("passing extras through: " + JSON.stringify(extras));
-      let promise = startWebChannel(extras.content);
+  let extras = Helper.getPrefs();
+  console.log("extras are: " + JSON.stringify(extras));
 
-      return promise.then((data) => { return {extras: extras, tab: tab, data: data}; });
-    })
+  let tab = window.BrowserApp.addTab(extras.content + SIGNIN);
+
+  return promiseObserverNotified("fxaccounts:login")
     .then(function (result) {
-      let redirectURL = result.extras.content + SETTINGS;
-      if (result.tab != null) {
-        window.BrowserApp.loadURI(redirectURL, result.tab.browser);
+      let redirectURL = extras.content + SETTINGS;
+      if (tab != null) {
+        window.BrowserApp.loadURI(redirectURL, tab.browser);
       }
       return result;
-    })
-    .then(function (result) {
-      let data = result.data;
-      data.authServerEndpoint = result.extras.content + AUTH;
-      data.tokenServerEndpoint = result.extras.content + TOKEN;
-      console.log("got data: " + JSON.stringify(data));
-      return Messaging.sendRequestForResult({ type: 'Accounts:CreateFirefoxAccountFromJSON', json: data })
-        .then(() => { return result; });
-    })
-    .then(function (result) {
-      var p = new Prompt({
-        window: window,
-        title: "Sync enabled",
-        message: "Firefox will begin syncing momentarily",
-        buttons: ["OK"],
-      }).show();
     })
     .catch(Cu.reportError);
 }
 
 // var gToastMenuId = null;
 var gDoorhangerMenuId = null;
+var gConfigureMenuId = null;
 // var gContextMenuId = null;
 
 function loadIntoWindow(window) {
   // gToastMenuId = window.NativeWindow.menu.add("Show Toast", null, function() { showToast(window); });
-  let title = Strings.GetStringFromName("menu.title");    
+  // First added appears last (!?).
+  let configureTitle = Strings.GetStringFromName("configure.title");
+  gConfigureMenuId = window.NativeWindow.menu.add(configureTitle, null, function() { configureSignInToSync(window); });
+  let title = Strings.GetStringFromName("menu.title");
   gDoorhangerMenuId = window.NativeWindow.menu.add(title, null, function() { signInToSync(window); });
   // gContextMenuId = window.NativeWindow.contextmenus.add("Copy Link", window.NativeWindow.contextmenus.linkOpenableContext, function(aTarget) { copyLink(window, aTarget); });
 }
@@ -161,6 +179,7 @@ function loadIntoWindow(window) {
 function unloadFromWindow(window) {
   // window.NativeWindow.menu.remove(gToastMenuId);
   window.NativeWindow.menu.remove(gDoorhangerMenuId);
+  window.NativeWindow.menu.remove(gConfigureMenuId);
   // window.NativeWindow.contextmenus.remove(gContextMenuId);
 }
 
@@ -178,13 +197,22 @@ var windowListener = {
     };
     domWindow.addEventListener("load", loadListener, false);
   },
-  
+
   onCloseWindow: function(aWindow) {
   },
-  
+
   onWindowTitleChange: function(aWindow, aTitle) {
   }
 };
+
+
+function updateWebChannel() {
+  stopWebChannel();
+
+  let origin = Services.io.newURI(Helper.getPrefs().content, null, null).prePath;
+  console.log('Updating WebChannel for origin: ' + origin);
+  startWebChannel(origin);
+}
 
 function startup(aData, aReason) {
   console.log('startup: ' + aReason);
@@ -201,6 +229,9 @@ function startup(aData, aReason) {
 
   // Always set the default prefs as they disappear on restart.
   Helper.setDefaultPrefs();
+
+  Services.prefs.addObserver(Helper.PREF_BRANCH + 'content', updateWebChannel, false);
+  updateWebChannel();
 }
 
 function shutdown(aData, aReason) {
@@ -211,6 +242,9 @@ function shutdown(aData, aReason) {
   if (aReason == APP_SHUTDOWN) {
     return;
   }
+
+  stopWebChannel();
+  Services.prefs.removeObserver(Helper.PREF_BRANCH + 'content', updateWebChannel);
 
   // Stop listening for new windows
   Services.wm.removeListener(windowListener);
