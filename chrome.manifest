@@ -1,2 +1,3 @@
 content fxa-web-signin content/
 locale  fxa-web-signin en-US locale/en-US/
+locale  fxa-web-signin ja locale/ja/
