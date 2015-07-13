@@ -21,8 +21,8 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm"); /*global XPCOMUtils */
 // oauth server: https://oauth-latest.dev.lcip.org
 // sync tokenserver: https://latest.dev.lcip.org/syncserver/token/1.0/sync/1.5
 
-let SIGNIN = '/signin?context=iframe&service=sync&entrypoint=p11';
-let SETTINGS = '/settings?context=iframe&service=sync&entrypoint=p11';
+let SIGNIN = '/start?context=iframe&service=sync&partner=p11';
+let SETTINGS = '/settings?context=iframe&service=sync&partner=p11';
 let AUTH = '/auth/v1';
 let TOKEN = '/syncserver/token/1.0/sync/1.5';
 
