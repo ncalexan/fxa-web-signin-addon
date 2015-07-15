@@ -21,8 +21,6 @@ Cu.import("resource://gre/modules/XPCOMUtils.jsm"); /*global XPCOMUtils */
 // oauth server: https://oauth-latest.dev.lcip.org
 // sync tokenserver: https://latest.dev.lcip.org/syncserver/token/1.0/sync/1.5
 
-let SIGNIN = '/start?context=iframe&service=sync&partner=p11';
-let SETTINGS = '/settings?context=iframe&service=sync&partner=p11';
 let AUTH = '/auth/v1';
 let TOKEN = '/syncserver/token/1.0/sync/1.5';
 
@@ -30,14 +28,6 @@ let TOKEN = '/syncserver/token/1.0/sync/1.5';
 XPCOMUtils.defineLazyGetter(this, "Strings", function() {
   return Services.strings.createBundle("chrome://fxa-web-signin/locale/strings.properties");
 }); /*global Strings */
-
-// An example of how to import a helper module.
-XPCOMUtils.defineLazyGetter(this, "Helper", function() {
-  let sandbox = {};
-  Services.scriptloader.loadSubScript("chrome://fxa-web-signin/content/helper.js", sandbox);
-  return sandbox["Helper"];
-}); /*global Helper*/
-
 
 function promiseObserverNotified(aTopic) {
   let deferred = Promise.defer();
@@ -47,7 +37,6 @@ function promiseObserverNotified(aTopic) {
     }, aTopic, false);
   return deferred.promise;
 }
-
 
 var channel = null;
 
@@ -113,16 +102,14 @@ function signInToSync(window) {
     throw new Error("channel must not be null");
   }
 
-  let extras = Helper.getPrefs();
-  console.log("extras are: " + JSON.stringify(extras));
-
-  let tab = window.BrowserApp.addTab(extras.content + SIGNIN);
+  let signin = Strings.GetStringFromName("extensions.fxa.web.signin");
+  let tab = window.BrowserApp.addTab(signin);
 
   return promiseObserverNotified("fxaccounts:login")
     .then(function (result) {
-      let redirectURL = extras.content + SETTINGS;
+      let settings = Strings.GetStringFromName("extensions.fxa.web.settings");
       if (tab != null) {
-        window.BrowserApp.loadURI(redirectURL, tab.browser);
+        window.BrowserApp.loadURI(settings, tab.browser);
       }
       return result;
     })
@@ -172,7 +159,8 @@ var windowListener = {
 function updateWebChannel() {
   stopWebChannel();
 
-  let origin = Services.io.newURI(Helper.getPrefs().content, null, null).prePath;
+  let signin = Strings.GetStringFromName("extensions.fxa.web.signin");
+  let origin = Services.io.newURI(signin, null, null).prePath;
   console.log('Updating WebChannel for origin: ' + origin);
   startWebChannel(origin);
 }
@@ -190,10 +178,6 @@ function startup(aData, aReason) {
   // Load into any new windows
   Services.wm.addListener(windowListener);
 
-  // Always set the default prefs as they disappear on restart.
-  Helper.setDefaultPrefs();
-
-  Services.prefs.addObserver(Helper.PREF_BRANCH + 'content', updateWebChannel, false);
   updateWebChannel();
 }
 
@@ -207,7 +191,6 @@ function shutdown(aData, aReason) {
   }
 
   stopWebChannel();
-  Services.prefs.removeObserver(Helper.PREF_BRANCH + 'content', updateWebChannel);
 
   // Stop listening for new windows
   Services.wm.removeListener(windowListener);
