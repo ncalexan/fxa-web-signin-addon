@@ -108,8 +108,16 @@ function signInToSync(window) {
   return promiseObserverNotified("fxaccounts:login")
     .then(function (result) {
       let settings = Strings.GetStringFromName("extensions.fxa.web.settings");
-      if (tab != null) {
-        window.BrowserApp.loadURI(settings, tab.browser);
+      // Settings can be empty, which means that the page itself will redirect
+      // automatically.  If it's not empty, then the page will spin forever and
+      // it's up to the browser (this add-on) to redirect away from the spinner.
+      // This is necessary because the partner and latest development sites have
+      // different behaviours: the partner sites redirect; the development sites
+      // spin.
+      if (settings) {
+        if (tab != null) {
+          window.BrowserApp.loadURI(settings, tab.browser);
+        }
       }
       return result;
     })
