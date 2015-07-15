@@ -48,38 +48,6 @@ function promiseObserverNotified(aTopic) {
   return deferred.promise;
 }
 
-function configureSignInToSync(window) {
-  let extras = Helper.getPrefs();
-
-  var p = new Prompt({
-    window: window,
-    title: Strings.GetStringFromName("prompt.title"),
-    buttons: [
-      Strings.GetStringFromName("prompt.button.save"),
-      Strings.GetStringFromName("prompt.button.cancel"),
-    ],
-  }).addTextbox({
-    value: extras.content,
-    id: "content",
-    hint: Strings.GetStringFromName("prompt.hint.content"),
-    autofocus: true,
-  });
-
-  p.show(function(data) {
-    // "Cancel" does nothing.
-    if (data.button == 1 || !data.content) {
-      return;
-    }
-
-    // Write for next time.
-    Helper.setPrefs(data);
-    extras.content = data.content;
-    // No trailing slashes, please.on
-    while (extras.content.endsWith('/')) {
-      extras.content = extras.content.substring(0, extras.content.length - 1);
-    }
-  });
-}
 
 var channel = null;
 
@@ -163,14 +131,10 @@ function signInToSync(window) {
 
 // var gToastMenuId = null;
 var gDoorhangerMenuId = null;
-var gConfigureMenuId = null;
 // var gContextMenuId = null;
 
 function loadIntoWindow(window) {
   // gToastMenuId = window.NativeWindow.menu.add("Show Toast", null, function() { showToast(window); });
-  // First added appears last (!?).
-  let configureTitle = Strings.GetStringFromName("configure.title");
-  gConfigureMenuId = window.NativeWindow.menu.add(configureTitle, null, function() { configureSignInToSync(window); });
   let title = Strings.GetStringFromName("menu.title");
   gDoorhangerMenuId = window.NativeWindow.menu.add(title, null, function() { signInToSync(window); });
   // gContextMenuId = window.NativeWindow.contextmenus.add("Copy Link", window.NativeWindow.contextmenus.linkOpenableContext, function(aTarget) { copyLink(window, aTarget); });
@@ -179,7 +143,6 @@ function loadIntoWindow(window) {
 function unloadFromWindow(window) {
   // window.NativeWindow.menu.remove(gToastMenuId);
   window.NativeWindow.menu.remove(gDoorhangerMenuId);
-  window.NativeWindow.menu.remove(gConfigureMenuId);
   // window.NativeWindow.contextmenus.remove(gContextMenuId);
 }
 
