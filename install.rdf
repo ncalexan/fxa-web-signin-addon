@@ -5,7 +5,7 @@
         <em:id>fxa-web-signin-addon@ncalexander.net</em:id>
         <em:type>2</em:type>
         <em:name>fxa-web-signin-addon</em:name>
-        <em:version>0.5</em:version>
+        <em:version>0.6</em:version>
         <em:bootstrap>true</em:bootstrap>
         <em:description>Connect to Firefox Accounts using accounts.firefox.com</em:description>
         <em:creator>Nick Alexander</em:creator>
